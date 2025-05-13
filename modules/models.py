@@ -3,6 +3,7 @@ from tensorflow.keras import Model
 from tensorflow.keras.applications import MobileNetV2, ResNet50
 from tensorflow.keras.layers import Input, Conv2D, ReLU, LeakyReLU
 from modules.anchor import decode_tf, prior_box_tf
+from tensorflow.keras.layers import Concatenate
 
 
 def _regularizer(weights_decay):
@@ -26,11 +27,7 @@ class BatchNormalization(tf.keras.layers.BatchNormalization):
             scale=scale, name=name, **kwargs)
 
     def call(self, x, training=False):
-        if training is None:
-            training = tf.constant(False)
-        training = tf.logical_and(training, self.trainable)
-
-        return super().call(x, training)
+        return super().call(x, training=training and self.trainable)
 
 
 def Backbone(backbone_type='ResNet50', use_pretrain=True):
@@ -218,15 +215,15 @@ def RetinaFaceModel(cfg, training=False, iou_th=0.4, score_th=0.02,
     features = [SSH(out_ch=out_ch, wd=wd, name=f'SSH_{i}')(f)
                 for i, f in enumerate(fpn)]
 
-    bbox_regressions = tf.concat(
-        [BboxHead(num_anchor, wd=wd, name=f'BboxHead_{i}')(f)
-         for i, f in enumerate(features)], axis=1)
-    landm_regressions = tf.concat(
-        [LandmarkHead(num_anchor, wd=wd, name=f'LandmarkHead_{i}')(f)
-         for i, f in enumerate(features)], axis=1)
-    classifications = tf.concat(
-        [ClassHead(num_anchor, wd=wd, name=f'ClassHead_{i}')(f)
-         for i, f in enumerate(features)], axis=1)
+    bbox_regressions = Concatenate(axis=1)(
+    [BboxHead(num_anchor, wd=wd, name=f'BboxHead_{i}')(f) for i, f in enumerate(features)]
+)
+    landm_regressions = Concatenate(axis=1)(
+        [LandmarkHead(num_anchor, wd=wd, name=f'LandmarkHead_{i}')(f) for i, f in enumerate(features)]
+    )
+    classifications = Concatenate(axis=1)(
+        [ClassHead(num_anchor, wd=wd, name=f'ClassHead_{i}')(f) for i, f in enumerate(features)]
+    )
 
     classifications = tf.keras.layers.Softmax(axis=-1)(classifications)
 
